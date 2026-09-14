@@ -84,6 +84,7 @@ struct NewActivityView: View {
             }
         }
         .navigationTitle("Nuova attività")
+        .toolbar { ToolbarItem(placement: .topBarTrailing) { Text("v1.0").font(.caption.bold()).foregroundStyle(.secondary) } }
         .sheet(item: $sheet) { value in DirectoryEditorSheet(kind: value, selectedAircraftID: draft.aircraftID) }
         .sheet(isPresented: Binding(get: { completedPageURL != nil }, set: { if !$0 { completedPageURL = nil } })) {
             if let completedPageURL { CompletedPageShareView(url: completedPageURL) }

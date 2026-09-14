@@ -65,6 +65,7 @@ def interface_and_privacy_checks() -> list[str]:
     assert joined.count("role: .destructive") >= 4  # doppia conferma eliminazione + importazione
     assert "cloudKitDatabase: .none" in joined
     assert "Impresa di esempio" not in joined
+    assert "Impresa associata" not in joined
     pdf_exporter = (APP / "Services" / "MERLPDFExporter.swift").read_text()
     assert "Dictionary(grouping: records, by: { $0.company })" not in pdf_exporter
     assert "draw(company:" not in pdf_exporter
@@ -80,6 +81,14 @@ def interface_and_privacy_checks() -> list[str]:
     assert joined.count("numeric: false, width:") >= 5
     assert 'draft.ata = ""' in joined and 'draft.description = ""' in joined
     assert "guard draft.codeComplete else { return }" in joined
+    assert "MY MERL 1.0" in joined and 'Text("v1.0")' in joined
+    directories = (APP / "Views" / "DirectoriesView.swift").read_text()
+    assert directories.count(".onDelete") == 4
+    assert "EditButton()" in directories and 'Image(systemName: "trash")' in directories
+    for kind in [".site", ".aircraft", ".registration", ".supervisor"]:
+        assert f"kind: {kind}" in directories
+    seed = (APP / "Services" / "SeedService.swift").read_text()
+    assert "context.insert" not in seed
     forbidden = re.findall(r'https?://|URLSession|Firebase', joined)
     assert not forbidden, f"Rete inattesa nel codice: {forbidden}"
     contents = json.loads((APP / "Assets.xcassets" / "AppIcon.appiconset" / "Contents.json").read_text())

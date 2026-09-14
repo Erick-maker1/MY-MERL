@@ -21,7 +21,6 @@ struct DirectoryEditorSheet: View {
                 case .site:
                     TextField("Nome sede", text: $first).requiredField(attempted && first.isEmpty)
                     Picker("Tipologia", selection: $mode) { ForEach(MaintenanceMode.allCases) { Text($0.rawValue).tag($0) } }.pickerStyle(.segmented)
-                    TextField("Impresa associata", text: $second).requiredField(attempted && second.isEmpty)
                     TextField("Note facoltative", text: $third, axis: .vertical)
                 case .aircraft:
                     TextField("Costruttore", text: $first).requiredField(attempted && first.isEmpty)
@@ -59,8 +58,8 @@ struct DirectoryEditorSheet: View {
         attempted = true
         switch kind {
         case .site:
-            guard !first.trimmed.isEmpty, !second.trimmed.isEmpty else { return }
-            context.insert(MaintenanceSite(name: first.trimmed, mode: mode, company: second.trimmed, notes: third.trimmed))
+            guard !first.trimmed.isEmpty else { return }
+            context.insert(MaintenanceSite(name: first.trimmed, mode: mode, company: "", notes: third.trimmed))
         case .aircraft:
             guard !first.trimmed.isEmpty, !second.trimmed.isEmpty else { return }
             context.insert(AircraftModel(manufacturer: first.trimmed, modelName: second.trimmed, engineType: third.trimmed))
@@ -93,7 +92,7 @@ struct DirectoriesView: View {
                     directoryRow {
                         Label("\(item.name) · \(item.mode.rawValue)", systemImage: "mappin.and.ellipse")
                     } target: { .init(kind: .site, itemID: item.id, name: item.name) }
-                }
+                }.onDelete { offsets in requestDelete(offsets, from: sites, kind: .site, name: \.name) }
                 addButton(.site, "Aggiungi sede")
             }
             Section("Tipi A/M") {
@@ -101,7 +100,7 @@ struct DirectoriesView: View {
                     directoryRow {
                         VStack(alignment: .leading) { Text(item.modelName); Text([item.manufacturer, item.engineType].filter { !$0.isEmpty }.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary) }
                     } target: { .init(kind: .aircraft, itemID: item.id, name: item.modelName) }
-                }
+                }.onDelete { offsets in requestDelete(offsets, from: aircraft, kind: .aircraft, name: \.modelName) }
                 addButton(.aircraft, "Aggiungi tipo A/M")
             }
             Section("Marche") {
@@ -109,7 +108,7 @@ struct DirectoriesView: View {
                     directoryRow { Text(item.registration) } target: {
                         .init(kind: .registration, itemID: item.id, name: item.registration)
                     }
-                }
+                }.onDelete { offsets in requestDelete(offsets, from: registrations, kind: .registration, name: \.registration) }
                 addButton(.registration, "Aggiungi marche")
             }
             Section("Supervisori") {
@@ -117,11 +116,15 @@ struct DirectoriesView: View {
                     directoryRow {
                         VStack(alignment: .leading) { Text(item.fullName); Text([item.licenceCategory, item.licenceNumber].filter { !$0.isEmpty }.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary) }
                     } target: { .init(kind: .supervisor, itemID: item.id, name: item.fullName) }
-                }
+                }.onDelete { offsets in requestDelete(offsets, from: supervisors, kind: .supervisor, name: \.fullName) }
                 addButton(.supervisor, "Aggiungi supervisore")
             }
         }
         .navigationTitle("Rubriche")
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) { Text("MY MERL 1.0").font(.caption.bold()).foregroundStyle(.secondary) }
+            ToolbarItem(placement: .topBarTrailing) { EditButton() }
+        }
         .sheet(item: $sheet) { DirectoryEditorSheet(kind: $0, selectedAircraftID: nil) }
         .confirmationDialog("Prima conferma", isPresented: Binding(get: { pendingDelete != nil && !showFinalDeleteConfirmation }, set: { if !$0 && !showFinalDeleteConfirmation { pendingDelete = nil } }), titleVisibility: .visible) {
             Button("Annulla", role: .cancel) { pendingDelete = nil }
@@ -146,6 +149,13 @@ struct DirectoriesView: View {
                 Image(systemName: "trash").font(.body.bold()).padding(8)
             }.buttonStyle(.borderless).accessibilityLabel("Elimina")
         }
+    }
+
+    private func requestDelete<T: Identifiable>(_ offsets: IndexSet, from values: [T], kind: DirectoryDelete.Kind,
+                                                 name: KeyPath<T, String>) where T.ID == UUID {
+        guard let index = offsets.first, values.indices.contains(index) else { return }
+        let item = values[index]
+        pendingDelete = DirectoryDelete(kind: kind, itemID: item.id, name: item[keyPath: name])
     }
 
     private func deleteConfirmed() {
