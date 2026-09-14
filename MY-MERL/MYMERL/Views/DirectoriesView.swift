@@ -76,42 +76,87 @@ struct DirectoryEditorSheet: View {
 }
 
 struct DirectoriesView: View {
+    @Environment(\.modelContext) private var context
     @Query(sort: \MaintenanceSite.name) private var sites: [MaintenanceSite]
     @Query(sort: \AircraftModel.modelName) private var aircraft: [AircraftModel]
     @Query(sort: \AircraftRegistration.registration) private var registrations: [AircraftRegistration]
     @Query(sort: \Supervisor.surname) private var supervisors: [Supervisor]
+    @Query private var references: [MaintenanceReference]
     @State private var sheet: NewActivityView.DirectorySheet?
+    @State private var pendingDelete: DirectoryDelete?
 
     var body: some View {
         List {
             Section("Sedi") {
-                ForEach(sites) { Label("\($0.name) · \($0.mode.rawValue)", systemImage: "mappin.and.ellipse") }
+                ForEach(sites) { item in
+                    Label("\(item.name) · \(item.mode.rawValue)", systemImage: "mappin.and.ellipse")
+                        .swipeActions { deleteButton(.init(kind: .site, itemID: item.id, name: item.name)) }
+                }
                 addButton(.site, "Aggiungi sede")
             }
             Section("Tipi A/M") {
                 ForEach(aircraft) { item in
                     VStack(alignment: .leading) { Text(item.modelName); Text([item.manufacturer, item.engineType].filter { !$0.isEmpty }.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary) }
+                        .swipeActions { deleteButton(.init(kind: .aircraft, itemID: item.id, name: item.modelName)) }
                 }
                 addButton(.aircraft, "Aggiungi tipo A/M")
             }
             Section("Marche") {
-                ForEach(registrations) { Text($0.registration) }
+                ForEach(registrations) { item in
+                    Text(item.registration).swipeActions { deleteButton(.init(kind: .registration, itemID: item.id, name: item.registration)) }
+                }
                 addButton(.registration, "Aggiungi marche")
             }
             Section("Supervisori") {
                 ForEach(supervisors) { item in
                     VStack(alignment: .leading) { Text(item.fullName); Text([item.licenceCategory, item.licenceNumber].filter { !$0.isEmpty }.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary) }
+                        .swipeActions { deleteButton(.init(kind: .supervisor, itemID: item.id, name: item.fullName)) }
                 }
                 addButton(.supervisor, "Aggiungi supervisore")
             }
         }
         .navigationTitle("Rubriche")
         .sheet(item: $sheet) { DirectoryEditorSheet(kind: $0, selectedAircraftID: nil) }
+        .alert("Eliminare dalla rubrica?", isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } })) {
+            Button("Annulla", role: .cancel) { pendingDelete = nil }
+            Button("Elimina", role: .destructive, action: deleteConfirmed)
+        } message: {
+            Text("\(pendingDelete?.name ?? "") non sarà più selezionabile. Le attività già registrate conserveranno i dati storici.")
+        }
     }
 
     private func addButton(_ kind: NewActivityView.DirectorySheet, _ title: String) -> some View {
         Button { sheet = kind } label: { Label(title, systemImage: "plus.circle") }
     }
+
+    private func deleteButton(_ target: DirectoryDelete) -> some View {
+        Button(role: .destructive) { pendingDelete = target } label: { Label("Elimina", systemImage: "trash") }
+    }
+
+    private func deleteConfirmed() {
+        guard let target = pendingDelete else { return }
+        switch target.kind {
+        case .site:
+            if let item = sites.first(where: { $0.id == target.itemID }) { context.delete(item) }
+        case .aircraft:
+            registrations.filter { $0.aircraftModelID == target.itemID }.forEach { context.delete($0) }
+            references.filter { $0.aircraftModelID == target.itemID }.forEach { context.delete($0) }
+            if let item = aircraft.first(where: { $0.id == target.itemID }) { context.delete(item) }
+        case .registration:
+            if let item = registrations.first(where: { $0.id == target.itemID }) { context.delete(item) }
+        case .supervisor:
+            if let item = supervisors.first(where: { $0.id == target.itemID }) { context.delete(item) }
+        }
+        try? context.save(); pendingDelete = nil
+    }
+}
+
+private struct DirectoryDelete: Identifiable {
+    enum Kind { case site, aircraft, registration, supervisor }
+    let id = UUID()
+    let kind: Kind
+    let itemID: UUID
+    let name: String
 }
 
 private extension String {

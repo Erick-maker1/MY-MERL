@@ -28,13 +28,17 @@ struct DirectoryPickerRow<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text(title).font(.caption).foregroundStyle(.secondary)
-            HStack(spacing: 8) {
-                content
+            HStack {
+                Text(title).font(.caption).foregroundStyle(.secondary)
+                Spacer()
                 Button(action: add) { Image(systemName: "plus").frame(width: 36, height: 36) }
                     .buttonStyle(.bordered)
                     .accessibilityLabel("Aggiungi \(title)")
             }
+            content
+                .frame(maxWidth: .infinity, minHeight: 42, alignment: .leading)
+                .background(Color(.secondarySystemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
         }
     }
 }

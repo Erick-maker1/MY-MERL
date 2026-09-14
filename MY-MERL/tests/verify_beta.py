@@ -31,7 +31,16 @@ def logic_checks() -> list[str]:
     source = (APP / "Services" / "SummaryCalculator.swift").read_text()
     for rule in ["lineHours / 6.0", "baseHours / 6.0", "floor(value * 10) / 10", "equivalenceGroup", "isMERLEligible"]:
         assert rule in source, f"Regola assente: {rule}"
-    return ["Linea/Base separati", "6 ore/giorno", "troncamento a 1 decimale", "equivalenze tecniche", "esclusione non idonee"]
+    domain = (APP / "Models" / "Domain.swift").read_text()
+    activity_view = (APP / "Views" / "NewActivityView.swift").read_text()
+    assert 'id:"S4-71",section:4,ata:"71"' in domain
+    assert 'id:"S5-71",section:5,ata:"71"' in domain
+    assert "Dictionary(grouping: summaryCandidates, by: \\.section)" in activity_view
+    assert "rowIDs.forEach" in source and 'split(separator: ",")' in source
+    # Una singola attività ATA 71 viene espansa nelle due righe ENAC.
+    encoded_rows = "S4-71,S5-71".split(",")
+    assert encoded_rows == ["S4-71", "S5-71"] and len(encoded_rows) == 2
+    return ["Linea/Base separati", "6 ore/giorno", "troncamento a 1 decimale", "equivalenze tecniche", "ATA 71 automatico in sezioni 4+5", "esclusione non idonee"]
 
 
 def project_checks() -> list[str]:
@@ -55,11 +64,14 @@ def interface_and_privacy_checks() -> list[str]:
     assert "Color.red.opacity" in joined
     assert joined.count("role: .destructive") >= 4  # doppia conferma eliminazione + importazione
     assert "cloudKitDatabase: .none" in joined
+    assert "Impresa di esempio" not in joined
+    assert "Codice già presente nel database" in joined
+    assert "Cerca codice o descrizione" in joined
     forbidden = re.findall(r'https?://|URLSession|Firebase', joined)
     assert not forbidden, f"Rete inattesa nel codice: {forbidden}"
     contents = json.loads((APP / "Assets.xcassets" / "AppIcon.appiconset" / "Contents.json").read_text())
     assert contents["images"][0]["size"] == "1024x1024"
-    return ["campi obbligatori rossi", "doppia conferma", "nessuna chiamata di rete", "CloudKit disattivato", "5 sezioni principali"]
+    return ["campi obbligatori rossi", "doppia conferma", "nessun dato dimostrativo", "ricerca equivalenti assistita", "nessuna chiamata di rete", "CloudKit disattivato", "5 sezioni principali"]
 
 
 if __name__ == "__main__":

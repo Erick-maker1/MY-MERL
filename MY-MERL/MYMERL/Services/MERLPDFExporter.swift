@@ -62,7 +62,7 @@ enum MERLPDFExporter {
 
     private static func draw(company: String, records: [ActivityRecord], in bounds: CGRect) {
         let dark = UIColor(red: 0.05, green: 0.08, blue: 0.10, alpha: 1)
-        drawFit(company, centerX: 680, baseline: 485, maxWidth: 125, maxSize: 9.0, bounds: bounds, color: dark)
+        // Il campo impresa resta vuoto sul modulo ufficiale e sarà compilato manualmente.
         let centers: [CGFloat] = [43, 85, 131, 180, 230, 280, 403, 533, 609, 693]
         let widths: [CGFloat] = [34, 40, 40, 44, 32, 42, 176, 55, 67, 78]
         let baselines: [CGFloat] = [361, 332, 303, 274, 245, 216, 187, 158]

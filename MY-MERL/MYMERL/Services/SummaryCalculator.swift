@@ -28,8 +28,15 @@ struct OverallSummary {
 enum SummaryCalculator {
     static func byATA(_ records: [ActivityRecord]) -> [ATASummary] {
         let eligible = records.filter { $0.isMERLEligible }
-        return Dictionary(grouping: eligible, by: { $0.summaryRowID.isEmpty ? "ATA-\($0.ata)" : $0.summaryRowID })
-            .map { rowID, rows in
+        var expanded: [(String, ActivityRecord)] = []
+        for record in eligible {
+            let rowIDs = summaryRowIDs(record)
+            if rowIDs.isEmpty { expanded.append(("ATA-\(record.ata)", record)) }
+            else { rowIDs.forEach { expanded.append(($0, record)) } }
+        }
+        return Dictionary(grouping: expanded, by: { $0.0 })
+            .map { rowID, pairs in
+                let rows = pairs.map(\.1)
                 let line = rows.filter { $0.mode == .line }.reduce(0) { $0 + $1.workHours }
                 let base = rows.filter { $0.mode == .base }.reduce(0) { $0 + $1.workHours }
                 let definition = ENACSummaryRow.all.first { $0.id == rowID }
@@ -44,13 +51,12 @@ enum SummaryCalculator {
 
     static func overall(_ records: [ActivityRecord]) -> OverallSummary {
         let eligible = records.filter { $0.isMERLEligible }
-        let lineHours = eligible.filter { $0.mode == .line }.reduce(0) { $0 + $1.workHours }
-        let baseHours = eligible.filter { $0.mode == .base }.reduce(0) { $0 + $1.workHours }
+        let rows = byATA(eligible)
         return OverallSummary(
-            lineDays: lineHours / 6.0,
-            baseDays: baseHours / 6.0,
-            activityCount: eligible.count,
-            technicalTypeCount: Set(eligible.map { technicalIdentity($0) }).count,
+            lineDays: rows.reduce(0) { $0 + $1.lineDays },
+            baseDays: rows.reduce(0) { $0 + $1.baseDays },
+            activityCount: rows.reduce(0) { $0 + $1.activityCount },
+            technicalTypeCount: rows.reduce(0) { $0 + $1.technicalTypeCount },
             aircraftTypeCount: Set(eligible.map(\.aircraftModelID)).count,
             troubleshootingTypeCount: Set(eligible.filter { $0.isTroubleshooting }.map { technicalIdentity($0) }).count,
             functionalTestTypeCount: Set(eligible.filter { $0.isFunctionalTest }.map { technicalIdentity($0) }).count,
@@ -68,6 +74,10 @@ enum SummaryCalculator {
         if !group.isEmpty { return group.uppercased() }
         return [row.aircraftModelID.uuidString, row.manualType, row.maintenanceCode]
             .joined(separator: "|").uppercased()
+    }
+
+    private static func summaryRowIDs(_ row: ActivityRecord) -> [String] {
+        row.summaryRowID.split(separator: ",").map(String.init).filter { !$0.isEmpty }
     }
 
     private static func numericATA(_ value: String) -> Int {

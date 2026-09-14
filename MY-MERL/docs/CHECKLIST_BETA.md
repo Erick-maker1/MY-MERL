@@ -6,6 +6,7 @@
 - Verificare che 32 ore siano mostrate come 5,3 giornate.
 - Inserire due codici nello stesso gruppo tecnico: il conteggio tipologie deve aumentare una sola volta.
 - Inserire lo stesso codice su due modelli differenti senza gruppo comune: devono risultare distinti.
+- Inserire un'attività ATA 71 e verificare che gli stessi valori compaiano automaticamente sia nella sezione 4 sia nella sezione 5.
 - Provare un ATA ambiguo e controllare che la riga ENAC debba essere scelta.
 - Verificare RUP con e senza effettivo Engine Run-up.
 

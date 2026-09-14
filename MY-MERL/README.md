@@ -9,7 +9,7 @@ Applicazione personale e offline per registrare attività MERL e generare il mod
 - rubriche per sedi Base/Linea, aeromobili, marche e supervisori;
 - riferimenti AMM, EMM o altro separati per tipo di aeromobile;
 - ATA proposto dal codice ma sempre modificabile;
-- classificazione esplicita nella corretta riga delle sezioni ENAC 1–5;
+- classificazione automatica in tutte le sezioni ENAC 1–5 che contengono lo stesso ATA (per esempio ATA 71 nelle sezioni 4 e 5);
 - attività `B-` o `L-` automatica in base alla sede;
 - registro ricercabile e cancellazione con doppia conferma;
 - calcolo giornate Linea/Base su 6 ore, visualizzato con un decimale troncato;

@@ -30,12 +30,12 @@ enum BackupService {
         let envelope = try decoder.decode(BackupEnvelope.self, from: Data(contentsOf: url))
         guard envelope.version == BackupEnvelope.schemaVersion else { throw BackupError.unsupportedVersion(envelope.version) }
 
-        try context.fetch(FetchDescriptor<ActivityRecord>()).forEach(context.delete)
-        try context.fetch(FetchDescriptor<MaintenanceReference>()).forEach(context.delete)
-        try context.fetch(FetchDescriptor<AircraftRegistration>()).forEach(context.delete)
-        try context.fetch(FetchDescriptor<Supervisor>()).forEach(context.delete)
-        try context.fetch(FetchDescriptor<AircraftModel>()).forEach(context.delete)
-        try context.fetch(FetchDescriptor<MaintenanceSite>()).forEach(context.delete)
+        try context.fetch(FetchDescriptor<ActivityRecord>()).forEach { context.delete($0) }
+        try context.fetch(FetchDescriptor<MaintenanceReference>()).forEach { context.delete($0) }
+        try context.fetch(FetchDescriptor<AircraftRegistration>()).forEach { context.delete($0) }
+        try context.fetch(FetchDescriptor<Supervisor>()).forEach { context.delete($0) }
+        try context.fetch(FetchDescriptor<AircraftModel>()).forEach { context.delete($0) }
+        try context.fetch(FetchDescriptor<MaintenanceSite>()).forEach { context.delete($0) }
 
         envelope.sites.forEach { let x = MaintenanceSite(id: $0.id, name: $0.name, mode: MaintenanceMode(rawValue: $0.modeRaw) ?? .base, company: $0.company, notes: $0.notes); x.createdAt = $0.createdAt; context.insert(x) }
         envelope.aircraft.forEach { let x = AircraftModel(id: $0.id, manufacturer: $0.manufacturer, modelName: $0.modelName, engineType: $0.engineType); x.createdAt = $0.createdAt; context.insert(x) }
