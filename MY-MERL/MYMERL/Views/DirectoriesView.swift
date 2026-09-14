@@ -84,53 +84,68 @@ struct DirectoriesView: View {
     @Query private var references: [MaintenanceReference]
     @State private var sheet: NewActivityView.DirectorySheet?
     @State private var pendingDelete: DirectoryDelete?
+    @State private var showFinalDeleteConfirmation = false
 
     var body: some View {
         List {
             Section("Sedi") {
                 ForEach(sites) { item in
-                    Label("\(item.name) · \(item.mode.rawValue)", systemImage: "mappin.and.ellipse")
-                        .swipeActions { deleteButton(.init(kind: .site, itemID: item.id, name: item.name)) }
+                    directoryRow {
+                        Label("\(item.name) · \(item.mode.rawValue)", systemImage: "mappin.and.ellipse")
+                    } target: { .init(kind: .site, itemID: item.id, name: item.name) }
                 }
                 addButton(.site, "Aggiungi sede")
             }
             Section("Tipi A/M") {
                 ForEach(aircraft) { item in
-                    VStack(alignment: .leading) { Text(item.modelName); Text([item.manufacturer, item.engineType].filter { !$0.isEmpty }.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary) }
-                        .swipeActions { deleteButton(.init(kind: .aircraft, itemID: item.id, name: item.modelName)) }
+                    directoryRow {
+                        VStack(alignment: .leading) { Text(item.modelName); Text([item.manufacturer, item.engineType].filter { !$0.isEmpty }.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary) }
+                    } target: { .init(kind: .aircraft, itemID: item.id, name: item.modelName) }
                 }
                 addButton(.aircraft, "Aggiungi tipo A/M")
             }
             Section("Marche") {
                 ForEach(registrations) { item in
-                    Text(item.registration).swipeActions { deleteButton(.init(kind: .registration, itemID: item.id, name: item.registration)) }
+                    directoryRow { Text(item.registration) } target: {
+                        .init(kind: .registration, itemID: item.id, name: item.registration)
+                    }
                 }
                 addButton(.registration, "Aggiungi marche")
             }
             Section("Supervisori") {
                 ForEach(supervisors) { item in
-                    VStack(alignment: .leading) { Text(item.fullName); Text([item.licenceCategory, item.licenceNumber].filter { !$0.isEmpty }.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary) }
-                        .swipeActions { deleteButton(.init(kind: .supervisor, itemID: item.id, name: item.fullName)) }
+                    directoryRow {
+                        VStack(alignment: .leading) { Text(item.fullName); Text([item.licenceCategory, item.licenceNumber].filter { !$0.isEmpty }.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary) }
+                    } target: { .init(kind: .supervisor, itemID: item.id, name: item.fullName) }
                 }
                 addButton(.supervisor, "Aggiungi supervisore")
             }
         }
         .navigationTitle("Rubriche")
         .sheet(item: $sheet) { DirectoryEditorSheet(kind: $0, selectedAircraftID: nil) }
-        .alert("Eliminare dalla rubrica?", isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } })) {
+        .confirmationDialog("Prima conferma", isPresented: Binding(get: { pendingDelete != nil && !showFinalDeleteConfirmation }, set: { if !$0 && !showFinalDeleteConfirmation { pendingDelete = nil } }), titleVisibility: .visible) {
             Button("Annulla", role: .cancel) { pendingDelete = nil }
-            Button("Elimina", role: .destructive, action: deleteConfirmed)
+            Button("Continua con l'eliminazione", role: .destructive) { showFinalDeleteConfirmation = true }
         } message: {
             Text("\(pendingDelete?.name ?? "") non sarà più selezionabile. Le attività già registrate conserveranno i dati storici.")
         }
+        .alert("Conferma definitiva", isPresented: $showFinalDeleteConfirmation) {
+            Button("Annulla", role: .cancel) { pendingDelete = nil }
+            Button("Elimina definitivamente", role: .destructive, action: deleteConfirmed)
+        } message: { Text("Vuoi davvero eliminare \(pendingDelete?.name ?? "questo elemento") dalla rubrica?") }
     }
 
     private func addButton(_ kind: NewActivityView.DirectorySheet, _ title: String) -> some View {
         Button { sheet = kind } label: { Label(title, systemImage: "plus.circle") }
     }
 
-    private func deleteButton(_ target: DirectoryDelete) -> some View {
-        Button(role: .destructive) { pendingDelete = target } label: { Label("Elimina", systemImage: "trash") }
+    private func directoryRow<Content: View>(@ViewBuilder content: () -> Content, target: () -> DirectoryDelete) -> some View {
+        HStack(spacing: 12) {
+            content().frame(maxWidth: .infinity, alignment: .leading)
+            Button(role: .destructive) { pendingDelete = target() } label: {
+                Image(systemName: "trash").font(.body.bold()).padding(8)
+            }.buttonStyle(.borderless).accessibilityLabel("Elimina")
+        }
     }
 
     private func deleteConfirmed() {
@@ -147,7 +162,7 @@ struct DirectoriesView: View {
         case .supervisor:
             if let item = supervisors.first(where: { $0.id == target.itemID }) { context.delete(item) }
         }
-        try? context.save(); pendingDelete = nil
+        try? context.save(); pendingDelete = nil; showFinalDeleteConfirmation = false
     }
 }
 

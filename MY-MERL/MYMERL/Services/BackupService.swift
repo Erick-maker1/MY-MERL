@@ -46,9 +46,21 @@ enum BackupService {
         try context.save()
     }
 
-    static func temporaryURL(extension ext: String) -> URL {
-        let formatter = DateFormatter(); formatter.dateFormat = "yyyy-MM-dd_HHmm"
+    static func temporaryURL(prefix: String = "MY_MERL", extension ext: String) -> URL {
+        let formatter = DateFormatter(); formatter.dateFormat = "yyyy-MM-dd_HHmmss"
         return FileManager.default.temporaryDirectory
-            .appendingPathComponent("MY_MERL_\(formatter.string(from: .now)).\(ext)")
+            .appendingPathComponent("\(prefix)_\(formatter.string(from: .now))_\(UUID().uuidString.prefix(6)).\(ext)")
+    }
+}
+
+enum PageCheckpointStore {
+    private static let key = "MY_MERL_EXPORTED_COMPLETE_PAGES"
+    static func isExported(_ page: Int) -> Bool { exported.contains(page) }
+    static func markExported(_ page: Int) {
+        var values = exported; values.insert(page)
+        UserDefaults.standard.set(values.sorted(), forKey: key)
+    }
+    private static var exported: Set<Int> {
+        Set(UserDefaults.standard.array(forKey: key) as? [Int] ?? [])
     }
 }

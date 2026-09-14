@@ -65,8 +65,21 @@ def interface_and_privacy_checks() -> list[str]:
     assert joined.count("role: .destructive") >= 4  # doppia conferma eliminazione + importazione
     assert "cloudKitDatabase: .none" in joined
     assert "Impresa di esempio" not in joined
+    pdf_exporter = (APP / "Services" / "MERLPDFExporter.swift").read_text()
+    assert "Dictionary(grouping: records, by: { $0.company })" not in pdf_exporter
+    assert "draw(company:" not in pdf_exporter
+    assert "L'impresa è intenzionalmente ignorata" in pdf_exporter
     assert "Codice già presente nel database" in joined
     assert "Cerca codice o descrizione" in joined
+    assert "File pronti" in joined and "deleteGeneratedFile" in joined
+    assert "Il registro non è stato modificato" in joined
+    assert "Pagina MERL completata" in joined and "exportPage" in joined
+    assert "PageCheckpointStore.markExported" in joined and "già esportata" in joined
+    assert "Compila soltanto le caselle bianche" in joined
+    assert 'fixed("-")' in joined and 'fixed(",")' in joined
+    assert joined.count("numeric: false, width:") >= 5
+    assert 'draft.ata = ""' in joined and 'draft.description = ""' in joined
+    assert "guard draft.codeComplete else { return }" in joined
     forbidden = re.findall(r'https?://|URLSession|Firebase', joined)
     assert not forbidden, f"Rete inattesa nel codice: {forbidden}"
     contents = json.loads((APP / "Assets.xcassets" / "AppIcon.appiconset" / "Contents.json").read_text())

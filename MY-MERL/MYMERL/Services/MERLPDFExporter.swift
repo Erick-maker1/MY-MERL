@@ -3,34 +3,49 @@ import PDFKit
 import UIKit
 
 enum PDFExportError: LocalizedError {
-    case templateMissing, templatePageMissing, noRecords
+    case templateMissing, templatePageMissing, noRecords, invalidPage
     var errorDescription: String? {
         switch self {
         case .templateMissing: "Modello ENAC non trovato nell'app."
         case .templatePageMissing: "Pagina MERL non trovata nel modello ENAC."
         case .noRecords: "Non ci sono attività valide da esportare."
+        case .invalidPage: "La pagina MERL richiesta non contiene otto attività."
         }
     }
 }
 
 enum MERLPDFExporter {
+    static func exportPage(_ allRecords: [ActivityRecord], pageNumber: Int) throws -> URL {
+        let records = allRecords.filter { $0.isMERLEligible }.sorted { $0.date < $1.date }
+        let start = (pageNumber - 1) * 8
+        guard pageNumber > 0, start >= 0, records.count >= start + 8 else { throw PDFExportError.invalidPage }
+        guard let sourceURL = Bundle.main.url(forResource: "Part66_MERL_EdLuglio_2006", withExtension: "pdf"),
+              let document = PDFDocument(url: sourceURL) else { throw PDFExportError.templateMissing }
+        guard let template = document.page(at: 2) else { throw PDFExportError.templatePageMissing }
+        let pageRecords = Array(records[start..<(start + 8)])
+        guard let page = renderedPage(from: template, drawing: { draw(records: pageRecords, in: $0) }) else {
+            throw PDFExportError.templateMissing
+        }
+        let result = PDFDocument(); result.insert(page, at: 0)
+        let url = BackupService.temporaryURL(prefix: String(format: "MY_MERL_Pagina_%03d", pageNumber), extension: "pdf")
+        guard result.write(to: url) else { throw PDFExportError.templateMissing }
+        return url
+    }
+
     static func export(_ allRecords: [ActivityRecord]) throws -> URL {
         let records = allRecords.filter { $0.isMERLEligible }.sorted { $0.date < $1.date }
         guard !records.isEmpty else { throw PDFExportError.noRecords }
         guard let sourceURL = Bundle.main.url(forResource: "Part66_MERL_EdLuglio_2006", withExtension: "pdf"),
               let document = PDFDocument(url: sourceURL) else { throw PDFExportError.templateMissing }
         guard let template = document.page(at: 2) else { throw PDFExportError.templatePageMissing }
-        let grouped = Dictionary(grouping: records, by: { $0.company })
-        let orderedCompanies = grouped.keys.sorted()
-        let url = BackupService.temporaryURL(extension: "pdf")
+        let url = BackupService.temporaryURL(prefix: "MY_MERL_Completo", extension: "pdf")
         let result = PDFDocument()
         var outputIndex = 0
-        for company in orderedCompanies {
-            let rows = grouped[company] ?? []
-            for chunk in rows.chunked(size: 8) {
-                guard let page = renderedPage(from: template, drawing: { draw(company: company, records: chunk, in: $0) }) else { continue }
-                result.insert(page, at: outputIndex); outputIndex += 1
-            }
+        // L'impresa è intenzionalmente ignorata: il relativo campo del modulo
+        // ufficiale ENAC deve rimanere sempre vuoto e sarà compilato a mano.
+        for chunk in records.chunked(size: 8) {
+            guard let page = renderedPage(from: template, drawing: { draw(records: chunk, in: $0) }) else { continue }
+            result.insert(page, at: outputIndex); outputIndex += 1
         }
         let summaries = SummaryCalculator.byATA(records)
         for sourceIndex in 4...8 {
@@ -60,7 +75,7 @@ enum MERLPDFExporter {
         context.restoreGState()
     }
 
-    private static func draw(company: String, records: [ActivityRecord], in bounds: CGRect) {
+    private static func draw(records: [ActivityRecord], in bounds: CGRect) {
         let dark = UIColor(red: 0.05, green: 0.08, blue: 0.10, alpha: 1)
         // Il campo impresa resta vuoto sul modulo ufficiale e sarà compilato manualmente.
         let centers: [CGFloat] = [43, 85, 131, 180, 230, 280, 403, 533, 609, 693]

@@ -8,6 +8,7 @@ struct NewActivityView: View {
     @Query(sort: \AircraftRegistration.registration) private var registrations: [AircraftRegistration]
     @Query(sort: \Supervisor.surname) private var supervisors: [Supervisor]
     @Query private var references: [MaintenanceReference]
+    @Query(sort: \ActivityRecord.date) private var records: [ActivityRecord]
 
     @State private var draft = ActivityDraft()
     @State private var showErrors = false
@@ -18,6 +19,9 @@ struct NewActivityView: View {
     @State private var equivalentReferenceID: UUID?
     @State private var equivalentSearch = ""
     @State private var ambiguousSummaryRowID = ""
+    @State private var completedPageNumber: Int?
+    @State private var completedPageURL: URL?
+    @State private var pageExportError: String?
 
     enum DirectorySheet: String, Identifiable { case site, aircraft, registration, supervisor; var id: String { rawValue } }
 
@@ -61,7 +65,7 @@ struct NewActivityView: View {
                         if index < 2 { Spacer(); Rectangle().frame(height: 1).foregroundStyle(.tertiary); Spacer() }
                     }
                 }.font(.caption)
-                Text(["Dati principali", "Attività", "Documento e conferma"][step]).font(.headline)
+                Text(["1 · Aeromobile e sede", "2 · Lavoro eseguito", "3 · Ore, documento e conferma"][step]).font(.headline)
             }
             if step == 0 { mainDataSection }
             if step == 1 { activitySection }
@@ -81,14 +85,24 @@ struct NewActivityView: View {
         }
         .navigationTitle("Nuova attività")
         .sheet(item: $sheet) { value in DirectoryEditorSheet(kind: value, selectedAircraftID: draft.aircraftID) }
+        .sheet(isPresented: Binding(get: { completedPageURL != nil }, set: { if !$0 { completedPageURL = nil } })) {
+            if let completedPageURL { CompletedPageShareView(url: completedPageURL) }
+        }
         .alert("Attività salvata", isPresented: $savedMessage) { Button("OK") {} }
+        .alert("Pagina MERL completata", isPresented: Binding(get: { completedPageNumber != nil }, set: { if !$0 { completedPageNumber = nil } })) {
+            Button("Più tardi", role: .cancel) { completedPageNumber = nil }
+            Button("Genera PDF della pagina", action: generateCompletedPage)
+        } message: {
+            Text("Hai completato la pagina \(completedPageNumber ?? 0) con otto attività. Puoi salvarla ora oppure rigenerarla in qualsiasi momento da Esporta.")
+        }
+        .alert("Impossibile esportare", isPresented: Binding(get: { pageExportError != nil }, set: { if !$0 { pageExportError = nil } })) {
+            Button("OK") { pageExportError = nil }
+        } message: { Text(pageExportError ?? "") }
     }
 
     @ViewBuilder private var mainDataSection: some View {
         Section {
             DatePicker("Data", selection: $draft.date, displayedComponents: .date)
-            HStack { Text("Ore"); TextField("", text: $draft.hoursText).keyboardType(.decimalPad).multilineTextAlignment(.trailing) }
-                .requiredField(showErrors && draft.normalizedHours == nil)
         }
         Section("Aeromobile e sede") {
             DirectoryPickerRow(title: "Luogo") {
@@ -103,7 +117,7 @@ struct NewActivityView: View {
                     ForEach(aircraft) { Text($0.modelName).tag(Optional($0.id)) }
                 }.labelsHidden().frame(maxWidth: .infinity, alignment: .leading)
             } add: { sheet = .aircraft }
-            .onChange(of: draft.aircraftID) { _, _ in draft.registration = ""; findReference() }
+            .onChange(of: draft.aircraftID) { _, _ in draft.registration = ""; codeChanged() }
             DirectoryPickerRow(title: "Marche A/M") {
                 Picker("Marche A/M", selection: $draft.registration) {
                     Text("Seleziona").tag("")
@@ -122,14 +136,18 @@ struct NewActivityView: View {
                     .requiredField(showErrors && !draft.codeComplete).onChange(of: draft.otherCode) { _, _ in codeChanged() }
             } else {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("\(draft.manualType)  codice").font(.caption).foregroundStyle(.secondary)
-                    HStack(spacing: 5) {
-                        codeField("21", $draft.codePart1, max: 2); fixed("-")
-                        codeField("53", $draft.codePart2, max: 2); fixed("-")
-                        codeField("02", $draft.codePart3, max: 3); fixed(",")
-                        codeField("6", $draft.codePart4, max: 2); fixed("-")
-                        codeField("1", $draft.codePart5, max: 8, numeric: false)
+                    Text("Compila soltanto le caselle bianche").font(.caption).foregroundStyle(.secondary)
+                    HStack(spacing: 4) {
+                        Text(draft.manualType).font(.subheadline.bold()).fixedSize()
+                        codeField("21", $draft.codePart1, max: 2, numeric: false, width: 35); fixed("-")
+                        codeField("53", $draft.codePart2, max: 2, numeric: false, width: 35); fixed("-")
+                        codeField("02", $draft.codePart3, max: 3, numeric: false, width: 40); fixed(",")
+                        codeField("6", $draft.codePart4, max: 2, numeric: false, width: 32); fixed("-")
+                        codeField("1", $draft.codePart5, max: 8, numeric: false, width: 48)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Text("Formato automatico: \(draft.manualType) 21-53-02,6-1")
+                        .font(.caption2).foregroundStyle(.secondary)
                 }.requiredField(showErrors && !draft.codeComplete)
             }
             TextField("Capitolo ATA", text: $draft.ata).keyboardType(.numberPad).onChange(of: draft.ata) { _, _ in refreshSummaryRows() }
@@ -139,10 +157,12 @@ struct NewActivityView: View {
             TextField("Descrizione dell'attività", text: $draft.description, axis: .vertical)
                 .lineLimit(2...5).requiredField(showErrors && draft.description.isEmpty)
             VStack(alignment: .leading, spacing: 8) {
-                Text("L'app conterà automaticamente l'attività in:").font(.headline)
-                ForEach(automaticSummaryRows) { row in
-                    Label("Sezione \(row.section) · ATA \(row.ata)\n\(row.title)", systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.green).fixedSize(horizontal: false, vertical: true)
+                Text("Tabelle ENAC compilate automaticamente").font(.headline)
+                let automaticSections = automaticSummaryRows.map { "Sez. \($0.section)" }.joined(separator: " · ")
+                if !automaticSections.isEmpty {
+                    Label(automaticSections, systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                    Text("ATA \(draft.ata) sarà riportato con gli stessi valori in tutte queste sezioni.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
                 if automaticSummaryRows.isEmpty && ambiguousSummaryRows.isEmpty {
                     Label("Capitolo non presente nelle tabelle ENAC", systemImage: "exclamationmark.triangle.fill").foregroundStyle(.red)
@@ -159,7 +179,10 @@ struct NewActivityView: View {
             Toggle("Engine Run-up realmente eseguito", isOn: $draft.isEngineRunUp).disabled(draft.activityCode != .RUP)
             ActivityLegendView()
         }
-        Section("Conteggio delle tipologie tecniche") {
+    }
+
+    @ViewBuilder private var equivalenceSection: some View {
+        Section("Tipologia tecnica") {
             if let exactReference {
                 Label("Codice già presente nel database", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
                 Text("L'app userà automaticamente lo stesso gruppo di:\n\(exactReference.manualType) \(exactReference.code) · \(exactReference.activityDescription)")
@@ -191,6 +214,11 @@ struct NewActivityView: View {
     }
 
     @ViewBuilder private var documentSection: some View {
+        Section("Tempo di lavoro") {
+            HStack { Text("Ore"); TextField("Inserisci", text: $draft.hoursText).keyboardType(.decimalPad).multilineTextAlignment(.trailing) }
+                .requiredField(showErrors && draft.normalizedHours == nil)
+        }
+        equivalenceSection
         Section("Documento e supervisore") {
             Picker("Documento", selection: $draft.documentKind) { ForEach(DocumentKind.allCases) { Text($0.rawValue).tag($0) } }.pickerStyle(.segmented)
             if draft.documentKind == .workReport {
@@ -214,10 +242,14 @@ struct NewActivityView: View {
     }
 
     private func fixed(_ value: String) -> some View { Text(value).font(.title3.bold()).fixedSize() }
-    private func codeField(_ placeholder: String, _ value: Binding<String>, max: Int, numeric: Bool = true) -> some View {
+    private func codeField(_ placeholder: String, _ value: Binding<String>, max: Int, numeric: Bool = true,
+                           width: CGFloat) -> some View {
         TextField(placeholder, text: value)
             .keyboardType(numeric ? .numberPad : .asciiCapable)
             .textInputAutocapitalization(.characters).multilineTextAlignment(.center)
+            .frame(width: width, minHeight: 36)
+            .background(.background, in: RoundedRectangle(cornerRadius: 7))
+            .overlay { RoundedRectangle(cornerRadius: 7).stroke(.secondary.opacity(0.55), lineWidth: 1) }
             .onChange(of: value.wrappedValue) { _, newValue in
                 let allowed = numeric ? newValue.filter(\.isNumber) : newValue.filter { $0.isLetter || $0.isNumber }
                 value.wrappedValue = String(allowed.prefix(max)).uppercased(); codeChanged()
@@ -225,9 +257,19 @@ struct NewActivityView: View {
     }
 
     private func codeChanged() {
-        if draft.ata.isEmpty { draft.ata = draft.proposedATA }
+        // Ogni modifica del codice invalida tutti i valori ricavati dal codice
+        // precedente. Saranno ripopolati solo quando il nuovo codice è completo.
+        draft.ata = ""
+        draft.description = ""
         draft.equivalenceGroup = ""
+        draft.summaryRowIDs = []
+        ambiguousSummaryRowID = ""
+        useExistingTechnicalGroup = false
         equivalentReferenceID = nil
+        equivalentSearch = ""
+        guard draft.codeComplete else { return }
+        draft.ata = draft.proposedATA
+        refreshSummaryRows()
         findReference()
     }
 
@@ -243,7 +285,7 @@ struct NewActivityView: View {
 
     private func continueToNextStep() {
         showErrors = true
-        let mainValid = draft.siteID != nil && draft.aircraftID != nil && !draft.registration.isEmpty && draft.normalizedHours != nil
+        let mainValid = draft.siteID != nil && draft.aircraftID != nil && !draft.registration.isEmpty
         let ambiguityResolved = ambiguousSummaryRows.isEmpty || !ambiguousSummaryRowID.isEmpty
         let equivalenceResolved = !useExistingTechnicalGroup || equivalentReferenceID != nil
         let activityValid = draft.codeComplete && !draft.ata.isEmpty && !draft.description.isEmpty &&
@@ -296,6 +338,8 @@ struct NewActivityView: View {
                 code: normalizedCode, ata: draft.ata, activityDescription: normalizedDescription,
                 equivalenceGroup: draft.equivalenceGroup, summaryRowID: encodedSummaryRows))
         }
+        let completesPage = draft.isMERLEligible && (records.filter(\.isMERLEligible).count + 1).isMultiple(of: 8)
+        let newPageNumber = (records.filter(\.isMERLEligible).count + 1) / 8
         context.insert(ActivityRecord(date: draft.date, site: site, aircraft: aircraft,
             registration: draft.registration, manualType: draft.manualType, maintenanceCode: normalizedCode,
             ata: draft.ata, activityCode: draft.activityCode, activityDescription: normalizedDescription,
@@ -304,6 +348,36 @@ struct NewActivityView: View {
             isEngineRunUp: draft.activityCode == .RUP && draft.isEngineRunUp, isMERLEligible: draft.isMERLEligible))
         try? context.save()
         draft = ActivityDraft(); step = 0; showErrors = false; useExistingTechnicalGroup = false
-        equivalentReferenceID = nil; equivalentSearch = ""; ambiguousSummaryRowID = ""; savedMessage = true
+        equivalentReferenceID = nil; equivalentSearch = ""; ambiguousSummaryRowID = ""
+        if completesPage { completedPageNumber = newPageNumber } else { savedMessage = true }
+    }
+
+    private func generateCompletedPage() {
+        guard let page = completedPageNumber else { return }
+        do {
+            let currentRecords = try context.fetch(FetchDescriptor<ActivityRecord>())
+            completedPageURL = try MERLPDFExporter.exportPage(currentRecords, pageNumber: page)
+            PageCheckpointStore.markExported(page)
+        } catch { pageExportError = error.localizedDescription }
+        completedPageNumber = nil
+    }
+}
+
+private struct CompletedPageShareView: View {
+    let url: URL
+    @Environment(\.dismiss) private var dismiss
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 22) {
+                Image(systemName: "checkmark.circle.fill").font(.system(size: 54)).foregroundStyle(.green)
+                Text("Pagina MERL pronta").font(.title2.bold())
+                Text(url.lastPathComponent).font(.subheadline).multilineTextAlignment(.center)
+                ShareLink(item: url) { Label("Salva nell'app File", systemImage: "folder") }
+                    .buttonStyle(.borderedProminent).controlSize(.large)
+                Text("Il PDF contiene soltanto la tabella ufficiale ENAC con otto attività.")
+                    .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
+            }.padding()
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Chiudi") { dismiss() } } }
+        }
     }
 }
