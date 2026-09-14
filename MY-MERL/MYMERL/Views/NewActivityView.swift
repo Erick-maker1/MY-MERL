@@ -101,7 +101,7 @@ struct NewActivityView: View {
             HStack {
                 ForEach(0..<3) { index in
                     Label("\(index + 1)", systemImage: index <= step ? "circle.fill" : "circle")
-                        .foregroundStyle(index <= step ? .tint : .secondary)
+                        .foregroundStyle(index <= step ? Color.accentColor : Color.secondary)
                     if index < 2 { Spacer(); Rectangle().frame(height: 1).foregroundStyle(.tertiary); Spacer() }
                 }
             }.font(.caption)
