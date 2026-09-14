@@ -79,12 +79,26 @@ def interface_and_privacy_checks() -> list[str]:
     assert "Compila soltanto le caselle bianche" in joined
     assert 'fixed("-")' in joined and 'fixed(",")' in joined
     assert joined.count("numeric: false, width:") >= 5
+    assert ".frame(width: width, minHeight:" not in joined
+    assert "private var activityForm: some View" in joined
+    assert "private var presentedForm: some View" in joined
+    assert "private var alertedForm: some View" in joined
+    assert "? .tint : .secondary" not in joined
     assert 'draft.ata = ""' in joined and 'draft.description = ""' in joined
     assert "guard draft.codeComplete else { return }" in joined
-    assert "MY MERL 1.0" in joined and 'Text("v1.0")' in joined
+    assert "MY MERL 1.0.1 · 110" in joined and 'Text("v1.0.1 · 110")' in joined
     directories = (APP / "Views" / "DirectoriesView.swift").read_text()
     assert directories.count(".onDelete") == 4
     assert "EditButton()" in directories and 'Image(systemName: "trash")' in directories
+    assert "target: @escaping () -> DirectoryDelete" in directories
+    assert "ScrollViewReader" in joined and 'scrollTo("activityFormTop"' in joined
+    assert "draft.activityCode.title" in joined
+    assert 'ToolbarItemGroup(placement: .keyboard)' in joined and 'Button("Fine")' in joined
+    assert 'Section("Da completare")' in joined and "stepErrors" in joined
+    assert 'Section("Tempo di lavoro")' in joined
+    assert "Formato automatico:" not in joined
+    for example in ['codeField("21"', 'codeField("53"', 'codeField("02"', 'codeField("6"', 'codeField("1"']:
+        assert example not in joined
     for kind in [".site", ".aircraft", ".registration", ".supervisor"]:
         assert f"kind: {kind}" in directories
     seed = (APP / "Services" / "SeedService.swift").read_text()

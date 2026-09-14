@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UIKit
 
 struct NewActivityView: View {
     @Environment(\.modelContext) private var context
@@ -22,6 +23,7 @@ struct NewActivityView: View {
     @State private var completedPageNumber: Int?
     @State private var completedPageURL: URL?
     @State private var pageExportError: String?
+    @State private var stepErrors: [String] = []
 
     enum DirectorySheet: String, Identifiable { case site, aircraft, registration, supervisor; var id: String { rawValue } }
 
@@ -30,6 +32,7 @@ struct NewActivityView: View {
     private var selectedSupervisor: Supervisor? { supervisors.first { $0.id == draft.supervisorID } }
     private var filteredRegistrations: [AircraftRegistration] { registrations.filter { $0.aircraftModelID == draft.aircraftID } }
     private var formErrors: [String] { draft.errors(sites: sites, aircraft: aircraft, supervisors: supervisors) }
+    private var visibleErrors: [String] { step == 2 ? formErrors : stepErrors }
     private var summaryCandidates: [ENACSummaryRow] { ENACSummaryRow.candidates(for: draft.ata) }
     private var automaticSummaryRows: [ENACSummaryRow] {
         Dictionary(grouping: summaryCandidates, by: \.section).values.filter { $0.count == 1 }.compactMap(\.first).sorted { $0.section < $1.section }
@@ -60,22 +63,38 @@ struct NewActivityView: View {
     }
 
     private var activityForm: some View {
-        Form {
-            stepHeader
-            if step == 0 { mainDataSection }
-            if step == 1 { activitySection }
-            if step == 2 { documentSection }
-            if step == 2 && showErrors && !formErrors.isEmpty {
-                Section { ForEach(formErrors, id: \.self) { Label($0, systemImage: "exclamationmark.circle.fill").foregroundStyle(.red) } }
+        ScrollViewReader { proxy in
+            Form {
+                stepHeader.id("activityFormTop")
+                if step == 0 { mainDataSection }
+                if step == 1 { activitySection }
+                if step == 2 { documentSection }
+                if showErrors && !visibleErrors.isEmpty {
+                    Section("Da completare") {
+                        ForEach(visibleErrors, id: \.self) {
+                            Label($0, systemImage: "exclamationmark.circle.fill").foregroundStyle(.red)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+                navigationButtons
             }
-            navigationButtons
+            .onChange(of: step) { _, _ in
+                DispatchQueue.main.async { proxy.scrollTo("activityFormTop", anchor: .top) }
+            }
         }
     }
 
     private var presentedForm: some View {
         activityForm
         .navigationTitle("Nuova attività")
-        .toolbar { ToolbarItem(placement: .topBarTrailing) { Text("v1.0").font(.caption.bold()).foregroundStyle(.secondary) } }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) { Text("v1.0.1 · 110").font(.caption.bold()).foregroundStyle(.secondary) }
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Fine") { dismissKeyboard() }.fontWeight(.semibold)
+            }
+        }
         .sheet(item: $sheet) { value in DirectoryEditorSheet(kind: value, selectedAircraftID: draft.aircraftID) }
         .sheet(isPresented: Binding(get: { completedPageURL != nil }, set: { if !$0 { completedPageURL = nil } })) {
             if let completedPageURL { CompletedPageShareView(url: completedPageURL) }
@@ -105,7 +124,8 @@ struct NewActivityView: View {
                     if index < 2 { Spacer(); Rectangle().frame(height: 1).foregroundStyle(.tertiary); Spacer() }
                 }
             }.font(.caption)
-            Text(["1 · Aeromobile e sede", "2 · Lavoro eseguito", "3 · Ore, documento e conferma"][step]).font(.headline)
+            Text(["1 · Aeromobile e sede", "2 · Lavoro eseguito", "3 · Ore, documento e conferma"][step])
+                .font(.subheadline.weight(.semibold)).fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -159,20 +179,25 @@ struct NewActivityView: View {
                     Text("Compila soltanto le caselle bianche").font(.caption).foregroundStyle(.secondary)
                     HStack(spacing: 4) {
                         Text(draft.manualType).font(.subheadline.bold()).fixedSize()
-                        codeField("21", $draft.codePart1, max: 2, numeric: false, width: 35); fixed("-")
-                        codeField("53", $draft.codePart2, max: 2, numeric: false, width: 35); fixed("-")
-                        codeField("02", $draft.codePart3, max: 3, numeric: false, width: 40); fixed(",")
-                        codeField("6", $draft.codePart4, max: 2, numeric: false, width: 32); fixed("-")
-                        codeField("1", $draft.codePart5, max: 8, numeric: false, width: 48)
+                        codeField("", $draft.codePart1, max: 2, numeric: false, width: 35); fixed("-")
+                        codeField("", $draft.codePart2, max: 2, numeric: false, width: 35); fixed("-")
+                        codeField("", $draft.codePart3, max: 3, numeric: false, width: 40); fixed(",")
+                        codeField("", $draft.codePart4, max: 2, numeric: false, width: 32); fixed("-")
+                        codeField("", $draft.codePart5, max: 8, numeric: false, width: 48)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    Text("Formato automatico: \(draft.manualType) 21-53-02,6-1")
-                        .font(.caption2).foregroundStyle(.secondary)
                 }.requiredField(showErrors && !draft.codeComplete)
             }
             TextField("Capitolo ATA", text: $draft.ata).keyboardType(.numberPad).onChange(of: draft.ata) { _, _ in refreshSummaryRows() }
-            Picker("Tipo attività", selection: $draft.activityCode) {
-                ForEach(ActivityCode.allCases) { Text("\(selectedSite?.mode.prefix ?? "X")-\($0.rawValue) · \($0.title)").tag($0) }
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Tipo attività").font(.caption).foregroundStyle(.secondary)
+                Picker("Tipo attività", selection: $draft.activityCode) {
+                    ForEach(ActivityCode.allCases) { Text("\(selectedSite?.mode.prefix ?? "X")-\($0.rawValue) · \($0.title)").tag($0) }
+                }
+                .labelsHidden().frame(maxWidth: .infinity, alignment: .leading)
+                Text("\(selectedSite?.mode.prefix ?? "X")-\(draft.activityCode.rawValue) · \(draft.activityCode.title)")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             TextField("Descrizione dell'attività", text: $draft.description, axis: .vertical)
                 .lineLimit(2...5).requiredField(showErrors && draft.description.isEmpty)
@@ -306,13 +331,25 @@ struct NewActivityView: View {
 
     private func continueToNextStep() {
         showErrors = true
-        let mainValid = draft.siteID != nil && draft.aircraftID != nil && !draft.registration.isEmpty
-        let ambiguityResolved = ambiguousSummaryRows.isEmpty || !ambiguousSummaryRowID.isEmpty
-        let equivalenceResolved = !useExistingTechnicalGroup || equivalentReferenceID != nil
-        let activityValid = draft.codeComplete && !draft.ata.isEmpty && !draft.description.isEmpty &&
-            !draft.summaryRowIDs.isEmpty && ambiguityResolved && equivalenceResolved
-        let valid = step == 0 ? mainValid : activityValid
-        if valid { showErrors = false; step += 1 }
+        dismissKeyboard()
+        if step == 0 {
+            stepErrors = []
+            if draft.siteID == nil { stepErrors.append("Seleziona il luogo") }
+            if draft.aircraftID == nil { stepErrors.append("Seleziona il tipo A/M") }
+            if draft.registration.isEmpty { stepErrors.append("Seleziona le marche A/M") }
+        } else {
+            stepErrors = []
+            if !draft.codeComplete { stepErrors.append("Completa tutte le caselle del codice manutentivo") }
+            if draft.ata.isEmpty { stepErrors.append("Inserisci il capitolo ATA") }
+            if draft.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { stepErrors.append("Inserisci la descrizione dell'attività") }
+            if draft.summaryRowIDs.isEmpty { stepErrors.append("Il capitolo ATA non è associato a una tabella ENAC") }
+            if !ambiguousSummaryRows.isEmpty && ambiguousSummaryRowID.isEmpty { stepErrors.append("Seleziona il dettaglio tecnico ENAC") }
+        }
+        if stepErrors.isEmpty { showErrors = false; step += 1 }
+    }
+
+    private func dismissKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 
     private func findReference() {
