@@ -56,39 +56,34 @@ struct NewActivityView: View {
     }
 
     var body: some View {
+        alertedForm
+    }
+
+    private var activityForm: some View {
         Form {
-            Section {
-                HStack {
-                    ForEach(0..<3) { index in
-                        Label("\(index + 1)", systemImage: index <= step ? "circle.fill" : "circle")
-                            .foregroundStyle(index <= step ? .tint : .secondary)
-                        if index < 2 { Spacer(); Rectangle().frame(height: 1).foregroundStyle(.tertiary); Spacer() }
-                    }
-                }.font(.caption)
-                Text(["1 · Aeromobile e sede", "2 · Lavoro eseguito", "3 · Ore, documento e conferma"][step]).font(.headline)
-            }
+            stepHeader
             if step == 0 { mainDataSection }
             if step == 1 { activitySection }
             if step == 2 { documentSection }
-
             if step == 2 && showErrors && !formErrors.isEmpty {
                 Section { ForEach(formErrors, id: \.self) { Label($0, systemImage: "exclamationmark.circle.fill").foregroundStyle(.red) } }
             }
-            Section {
-                HStack {
-                    if step > 0 { Button("Indietro") { showErrors = false; step -= 1 } }
-                    Spacer()
-                    if step < 2 { Button("Continua") { continueToNextStep() }.fontWeight(.semibold) }
-                    else { Button("Salva attività", action: save).fontWeight(.semibold) }
-                }
-            }
+            navigationButtons
         }
+    }
+
+    private var presentedForm: some View {
+        activityForm
         .navigationTitle("Nuova attività")
         .toolbar { ToolbarItem(placement: .topBarTrailing) { Text("v1.0").font(.caption.bold()).foregroundStyle(.secondary) } }
         .sheet(item: $sheet) { value in DirectoryEditorSheet(kind: value, selectedAircraftID: draft.aircraftID) }
         .sheet(isPresented: Binding(get: { completedPageURL != nil }, set: { if !$0 { completedPageURL = nil } })) {
             if let completedPageURL { CompletedPageShareView(url: completedPageURL) }
         }
+    }
+
+    private var alertedForm: some View {
+        presentedForm
         .alert("Attività salvata", isPresented: $savedMessage) { Button("OK") {} }
         .alert("Pagina MERL completata", isPresented: Binding(get: { completedPageNumber != nil }, set: { if !$0 { completedPageNumber = nil } })) {
             Button("Più tardi", role: .cancel) { completedPageNumber = nil }
@@ -99,6 +94,30 @@ struct NewActivityView: View {
         .alert("Impossibile esportare", isPresented: Binding(get: { pageExportError != nil }, set: { if !$0 { pageExportError = nil } })) {
             Button("OK") { pageExportError = nil }
         } message: { Text(pageExportError ?? "") }
+    }
+
+    private var stepHeader: some View {
+        Section {
+            HStack {
+                ForEach(0..<3) { index in
+                    Label("\(index + 1)", systemImage: index <= step ? "circle.fill" : "circle")
+                        .foregroundStyle(index <= step ? .tint : .secondary)
+                    if index < 2 { Spacer(); Rectangle().frame(height: 1).foregroundStyle(.tertiary); Spacer() }
+                }
+            }.font(.caption)
+            Text(["1 · Aeromobile e sede", "2 · Lavoro eseguito", "3 · Ore, documento e conferma"][step]).font(.headline)
+        }
+    }
+
+    private var navigationButtons: some View {
+        Section {
+            HStack {
+                if step > 0 { Button("Indietro") { showErrors = false; step -= 1 } }
+                Spacer()
+                if step < 2 { Button("Continua") { continueToNextStep() }.fontWeight(.semibold) }
+                else { Button("Salva attività", action: save).fontWeight(.semibold) }
+            }
+        }
     }
 
     @ViewBuilder private var mainDataSection: some View {
