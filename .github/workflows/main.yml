@@ -1,0 +1,39 @@
+name: Build MY MERL beta
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+
+    steps:
+      - name: Scarica il progetto
+        uses: actions/checkout@v4
+
+      - name: Compila MY MERL
+        working-directory: MY-MERL
+        run: |
+          xcodebuild \
+            -project MYMERL.xcodeproj \
+            -scheme MYMERL \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            clean build
+
+      - name: Crea il file IPA
+        working-directory: MY-MERL
+        run: |
+          mkdir Payload
+          cp -R build/Build/Products/Release-iphoneos/MYMERL.app Payload/
+          ditto -c -k --sequesterRsrc --keepParent Payload MY-MERL-beta.ipa
+
+      - name: Prepara il download
+        uses: actions/upload-artifact@v4
+        with:
+          name: MY-MERL-beta
+          path: MY-MERL/MY-MERL-beta.ipa
+          retention-days: 14
