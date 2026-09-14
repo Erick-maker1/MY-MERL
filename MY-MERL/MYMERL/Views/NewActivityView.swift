@@ -248,7 +248,8 @@ struct NewActivityView: View {
         TextField(placeholder, text: value)
             .keyboardType(numeric ? .numberPad : .asciiCapable)
             .textInputAutocapitalization(.characters).multilineTextAlignment(.center)
-            .frame(width: width, minHeight: 36)
+            .frame(width: width)
+            .frame(minHeight: 36)
             .background(.background, in: RoundedRectangle(cornerRadius: 7))
             .overlay { RoundedRectangle(cornerRadius: 7).stroke(.secondary.opacity(0.55), lineWidth: 1) }
             .onChange(of: value.wrappedValue) { _, newValue in
