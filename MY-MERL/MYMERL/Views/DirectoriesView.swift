@@ -142,7 +142,8 @@ struct DirectoriesView: View {
         Button { sheet = kind } label: { Label(title, systemImage: "plus.circle") }
     }
 
-    private func directoryRow<Content: View>(@ViewBuilder content: () -> Content, target: () -> DirectoryDelete) -> some View {
+    private func directoryRow<Content: View>(@ViewBuilder content: () -> Content,
+                                             target: @escaping () -> DirectoryDelete) -> some View {
         HStack(spacing: 12) {
             content().frame(maxWidth: .infinity, alignment: .leading)
             Button(role: .destructive) { pendingDelete = target() } label: {
