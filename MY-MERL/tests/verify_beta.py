@@ -51,7 +51,14 @@ def project_checks() -> list[str]:
     assert "Part66_MERL_EdLuglio_2006.pdf" in pbx
     assert (APP / "Resources" / "Part66_MERL_EdLuglio_2006.pdf").stat().st_size > 100_000
     assert (APP / "Assets.xcassets" / "AppIcon.appiconset" / "AppIcon-1024.png").stat().st_size > 10_000
-    workflow = (ROOT / ".github" / "workflows" / "build-ios.yml").read_text()
+    workflow_candidates = [
+        ROOT / ".github" / "workflows" / "build-ios.yml",
+        ROOT.parent / ".github" / "workflows" / "main-1.0.4.yml",
+        ROOT.parent / ".github" / "workflows" / "main.yml",
+    ]
+    workflow_path = next((path for path in workflow_candidates if path.exists()), None)
+    assert workflow_path is not None, "Workflow GitHub Actions non trovato"
+    workflow = workflow_path.read_text()
     for token in ["macos-15", "Verifiche logiche e strutturali", "Compilazione Debug simulatore",
                   "Compilazione Release simulatore", "Compilazione Release iPhone",
                   "CODE_SIGNING_ALLOWED=NO", "MY-MERL-1.0.4-build140.ipa"]:
