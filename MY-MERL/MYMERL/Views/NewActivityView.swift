@@ -19,7 +19,6 @@ struct NewActivityView: View {
     @State private var useExistingTechnicalGroup = false
     @State private var equivalentReferenceID: UUID?
     @State private var equivalentSearch = ""
-    @State private var ambiguousSummaryRowID = ""
     @State private var completedPageNumber: Int?
     @State private var completedPageURL: URL?
     @State private var pageExportError: String?
@@ -35,10 +34,7 @@ struct NewActivityView: View {
     private var visibleErrors: [String] { step == 2 ? formErrors : stepErrors }
     private var summaryCandidates: [ENACSummaryRow] { ENACSummaryRow.candidates(for: draft.ata) }
     private var automaticSummaryRows: [ENACSummaryRow] {
-        Dictionary(grouping: summaryCandidates, by: \.section).values.filter { $0.count == 1 }.compactMap(\.first).sorted { $0.section < $1.section }
-    }
-    private var ambiguousSummaryRows: [ENACSummaryRow] {
-        Dictionary(grouping: summaryCandidates, by: \.section).values.filter { $0.count > 1 }.flatMap { $0 }.sorted { $0.id < $1.id }
+        summaryCandidates.sorted { ($0.section, $0.id) < ($1.section, $1.id) }
     }
     private var exactReference: MaintenanceReference? {
         guard let aircraftID = draft.aircraftID, draft.codeComplete else { return nil }
@@ -89,7 +85,7 @@ struct NewActivityView: View {
         activityForm
         .navigationTitle("Nuova attività")
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) { Text("v1.0.1 · 110").font(.caption.bold()).foregroundStyle(.secondary) }
+            ToolbarItem(placement: .topBarTrailing) { Text("v1.0.2 · 120").font(.caption.bold()).foregroundStyle(.secondary) }
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
                 Button("Fine") { dismissKeyboard() }.fontWeight(.semibold)
@@ -178,7 +174,7 @@ struct NewActivityView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Compila soltanto le caselle bianche").font(.caption).foregroundStyle(.secondary)
                     HStack(spacing: 4) {
-                        Text(draft.manualType).font(.subheadline.bold()).fixedSize()
+                        Text(draft.manualType).font(.caption2.bold()).fixedSize()
                         codeField("", $draft.codePart1, max: 2, numeric: false, width: 35); fixed("-")
                         codeField("", $draft.codePart2, max: 2, numeric: false, width: 35); fixed("-")
                         codeField("", $draft.codePart3, max: 3, numeric: false, width: 40); fixed(",")
@@ -209,16 +205,10 @@ struct NewActivityView: View {
                     Text("ATA \(draft.ata) sarà riportato con gli stessi valori in tutte queste sezioni.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
-                if automaticSummaryRows.isEmpty && ambiguousSummaryRows.isEmpty {
-                    Label("Capitolo non presente nelle tabelle ENAC", systemImage: "exclamationmark.triangle.fill").foregroundStyle(.red)
-                }
-                if !ambiguousSummaryRows.isEmpty {
-                    Text("In una stessa sezione esistono più righe con questo ATA. Seleziona il dettaglio corretto:")
-                        .font(.caption).foregroundStyle(.secondary)
-                    Picker("Dettaglio tecnico", selection: $ambiguousSummaryRowID) {
-                        Text("Seleziona").tag("")
-                        ForEach(ambiguousSummaryRows) { Text("Sez. \($0.section) · \($0.title)").tag($0.id) }
-                    }.onChange(of: ambiguousSummaryRowID) { _, _ in refreshSummaryRows(preserveAmbiguous: true) }
+                if automaticSummaryRows.isEmpty {
+                    Label("ATA non presente nei riepiloghi ENAC: l'attività sarà comunque registrata.",
+                          systemImage: "info.circle.fill")
+                        .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
             }.requiredField(showErrors && draft.summaryRowIDs.isEmpty)
             Toggle("Engine Run-up realmente eseguito", isOn: $draft.isEngineRunUp).disabled(draft.activityCode != .RUP)
@@ -309,7 +299,6 @@ struct NewActivityView: View {
         draft.description = ""
         draft.equivalenceGroup = ""
         draft.summaryRowIDs = []
-        ambiguousSummaryRowID = ""
         useExistingTechnicalGroup = false
         equivalentReferenceID = nil
         equivalentSearch = ""
@@ -342,10 +331,15 @@ struct NewActivityView: View {
             if !draft.codeComplete { stepErrors.append("Completa tutte le caselle del codice manutentivo") }
             if draft.ata.isEmpty { stepErrors.append("Inserisci il capitolo ATA") }
             if draft.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { stepErrors.append("Inserisci la descrizione dell'attività") }
-            if draft.summaryRowIDs.isEmpty { stepErrors.append("Il capitolo ATA non è associato a una tabella ENAC") }
-            if !ambiguousSummaryRows.isEmpty && ambiguousSummaryRowID.isEmpty { stepErrors.append("Seleziona il dettaglio tecnico ENAC") }
         }
-        if stepErrors.isEmpty { showErrors = false; step += 1 }
+        if stepErrors.isEmpty {
+            if step == 1 {
+                refreshSummaryRows()
+                if draft.summaryRowIDs.isEmpty { draft.summaryRowIDs = ["ATA-\(draft.ata)"] }
+            }
+            showErrors = false
+            withAnimation { step += 1 }
+        }
     }
 
     private func dismissKeyboard() {
@@ -363,15 +357,11 @@ struct NewActivityView: View {
             // tutte le righe non ambigue presenti nelle diverse sezioni ENAC.
             draft.summaryRowIDs = Set(match.summaryRowID.split(separator: ",").map(String.init))
                 .union(automaticSummaryRows.map(\.id))
-            ambiguousSummaryRowID = draft.summaryRowIDs.first(where: { id in ambiguousSummaryRows.contains { $0.id == id } }) ?? ""
         }
     }
 
-    private func refreshSummaryRows(preserveAmbiguous: Bool = false) {
-        if !preserveAmbiguous { ambiguousSummaryRowID = "" }
-        var ids = Set(automaticSummaryRows.map(\.id))
-        if !ambiguousSummaryRowID.isEmpty { ids.insert(ambiguousSummaryRowID) }
-        draft.summaryRowIDs = ids
+    private func refreshSummaryRows() {
+        draft.summaryRowIDs = Set(automaticSummaryRows.map(\.id))
     }
 
     private func save() {
@@ -406,7 +396,7 @@ struct NewActivityView: View {
             isEngineRunUp: draft.activityCode == .RUP && draft.isEngineRunUp, isMERLEligible: draft.isMERLEligible))
         try? context.save()
         draft = ActivityDraft(); step = 0; showErrors = false; useExistingTechnicalGroup = false
-        equivalentReferenceID = nil; equivalentSearch = ""; ambiguousSummaryRowID = ""
+        equivalentReferenceID = nil; equivalentSearch = ""
         if completesPage { completedPageNumber = newPageNumber } else { savedMessage = true }
     }
 

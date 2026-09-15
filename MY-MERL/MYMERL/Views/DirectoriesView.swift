@@ -122,7 +122,7 @@ struct DirectoriesView: View {
         }
         .navigationTitle("Rubriche")
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) { Text("MY MERL 1.0.1 · 110").font(.caption.bold()).foregroundStyle(.secondary) }
+            ToolbarItem(placement: .topBarLeading) { Text("MY MERL 1.0.2 · 120").font(.caption.bold()).foregroundStyle(.secondary) }
             ToolbarItem(placement: .topBarTrailing) { EditButton() }
         }
         .sheet(item: $sheet) { DirectoryEditorSheet(kind: $0, selectedAircraftID: nil) }

@@ -35,7 +35,7 @@ def logic_checks() -> list[str]:
     activity_view = (APP / "Views" / "NewActivityView.swift").read_text()
     assert 'id:"S4-71",section:4,ata:"71"' in domain
     assert 'id:"S5-71",section:5,ata:"71"' in domain
-    assert "Dictionary(grouping: summaryCandidates, by: \\.section)" in activity_view
+    assert "summaryCandidates.sorted" in activity_view
     assert "rowIDs.forEach" in source and 'split(separator: ",")' in source
     # Una singola attività ATA 71 viene espansa nelle due righe ENAC.
     encoded_rows = "S4-71,S5-71".split(",")
@@ -86,7 +86,7 @@ def interface_and_privacy_checks() -> list[str]:
     assert "? .tint : .secondary" not in joined
     assert 'draft.ata = ""' in joined and 'draft.description = ""' in joined
     assert "guard draft.codeComplete else { return }" in joined
-    assert "MY MERL 1.0.1 · 110" in joined and 'Text("v1.0.1 · 110")' in joined
+    assert "MY MERL 1.0.2 · 120" in joined and 'Text("v1.0.2 · 120")' in joined
     directories = (APP / "Views" / "DirectoriesView.swift").read_text()
     assert directories.count(".onDelete") == 4
     assert "EditButton()" in directories and 'Image(systemName: "trash")' in directories
@@ -96,6 +96,8 @@ def interface_and_privacy_checks() -> list[str]:
     assert 'ToolbarItemGroup(placement: .keyboard)' in joined and 'Button("Fine")' in joined
     assert 'Section("Da completare")' in joined and "stepErrors" in joined
     assert 'Section("Tempo di lavoro")' in joined
+    assert r'draft.summaryRowIDs = ["ATA-\(draft.ata)"]' in joined
+    assert "Seleziona il dettaglio tecnico ENAC" not in joined
     assert "Formato automatico:" not in joined
     for example in ['codeField("21"', 'codeField("53"', 'codeField("02"', 'codeField("6"', 'codeField("1"']:
         assert example not in joined
