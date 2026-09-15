@@ -1,4 +1,4 @@
-# MY MERL 1.0.2 — iPhone offline
+# MY MERL 1.0.4 — iPhone offline
 
 Applicazione personale e offline per registrare attività MERL e generare il modello ENAC.
 
@@ -22,7 +22,7 @@ Applicazione personale e offline per registrare attività MERL e generare il mod
 
 L'app non contiene chiamate di rete. Tutti i dati operativi sono nel contenitore locale iOS. La compilazione su GitHub contiene solo il codice sorgente e il modello ENAC vuoto.
 
-La build 120 mostra `v1.0.2 · 120` in Nuova attività e `MY MERL 1.0.2 · 120` in Rubriche, così la versione installata è verificabile direttamente dall'iPhone.
+La build 140 mostra `v1.0.4 · 140` in Nuova attività e `MY MERL 1.0.4 · 140` in Rubriche, così la versione installata è verificabile direttamente dall'iPhone.
 
 ## Build gratuita
 

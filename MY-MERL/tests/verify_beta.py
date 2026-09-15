@@ -52,7 +52,9 @@ def project_checks() -> list[str]:
     assert (APP / "Resources" / "Part66_MERL_EdLuglio_2006.pdf").stat().st_size > 100_000
     assert (APP / "Assets.xcassets" / "AppIcon.appiconset" / "AppIcon-1024.png").stat().st_size > 10_000
     workflow = (ROOT / ".github" / "workflows" / "build-ios.yml").read_text()
-    for token in ["macos-15", "CODE_SIGNING_ALLOWED=NO", "MY-MERL-beta.ipa"]:
+    for token in ["macos-15", "Verifiche logiche e strutturali", "Compilazione Debug simulatore",
+                  "Compilazione Release simulatore", "Compilazione Release iPhone",
+                  "CODE_SIGNING_ALLOWED=NO", "MY-MERL-1.0.4-build140.ipa"]:
         assert token in workflow
     return [f"{len(swift_files)} file Swift collegati", "PDF ENAC incluso", "icona 1024 px", "workflow IPA senza firma"]
 
@@ -86,16 +88,23 @@ def interface_and_privacy_checks() -> list[str]:
     assert "? .tint : .secondary" not in joined
     assert 'draft.ata = ""' in joined and 'draft.description = ""' in joined
     assert "guard draft.codeComplete else { return }" in joined
-    assert "MY MERL 1.0.2 · 120" in joined and 'Text("v1.0.2 · 120")' in joined
+    assert "MY MERL 1.0.4 · 140" in joined and 'Text("v1.0.4 · 140")' in joined
     directories = (APP / "Views" / "DirectoriesView.swift").read_text()
     assert directories.count(".onDelete") == 4
     assert "EditButton()" in directories and 'Image(systemName: "trash")' in directories
     assert "target: @escaping () -> DirectoryDelete" in directories
-    assert "ScrollViewReader" in joined and 'scrollTo("activityFormTop"' in joined
+    assert ".id(step)" in joined and "ScrollViewReader" not in joined
     assert "draft.activityCode.title" in joined
     assert 'ToolbarItemGroup(placement: .keyboard)' in joined and 'Button("Fine")' in joined
     assert 'Section("Da completare")' in joined and "stepErrors" in joined
     assert 'Section("Tempo di lavoro")' in joined
+    assert ".disabled(draft.activityCode != .RUP)" not in joined
+    assert "isEngineRunUp: draft.isEngineRunUp" in joined
+    assert "if step == 1" in joined and "withAnimation { step = 2 }" in joined
+    assert 'Button("Indietro", action: goBack)' in joined
+    assert 'Button("Continua", action: continueToNextStep)' in joined
+    assert joined.count(".buttonStyle(.borderless)") >= 3
+    assert "private func goBack()" in joined and "withAnimation { step -= 1 }" in joined
     assert r'draft.summaryRowIDs = ["ATA-\(draft.ata)"]' in joined
     assert "Seleziona il dettaglio tecnico ENAC" not in joined
     assert "Formato automatico:" not in joined

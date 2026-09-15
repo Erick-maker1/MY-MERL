@@ -59,33 +59,29 @@ struct NewActivityView: View {
     }
 
     private var activityForm: some View {
-        ScrollViewReader { proxy in
-            Form {
-                stepHeader.id("activityFormTop")
-                if step == 0 { mainDataSection }
-                if step == 1 { activitySection }
-                if step == 2 { documentSection }
-                if showErrors && !visibleErrors.isEmpty {
-                    Section("Da completare") {
-                        ForEach(visibleErrors, id: \.self) {
-                            Label($0, systemImage: "exclamationmark.circle.fill").foregroundStyle(.red)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
+        Form {
+            stepHeader
+            if step == 0 { mainDataSection }
+            if step == 1 { activitySection }
+            if step == 2 { documentSection }
+            if showErrors && !visibleErrors.isEmpty {
+                Section("Da completare") {
+                    ForEach(visibleErrors, id: \.self) {
+                        Label($0, systemImage: "exclamationmark.circle.fill").foregroundStyle(.red)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                navigationButtons
             }
-            .onChange(of: step) { _, _ in
-                DispatchQueue.main.async { proxy.scrollTo("activityFormTop", anchor: .top) }
-            }
+            navigationButtons
         }
+        .id(step)
     }
 
     private var presentedForm: some View {
         activityForm
         .navigationTitle("Nuova attività")
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) { Text("v1.0.2 · 120").font(.caption.bold()).foregroundStyle(.secondary) }
+            ToolbarItem(placement: .topBarTrailing) { Text("v1.0.4 · 140").font(.caption.bold()).foregroundStyle(.secondary) }
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
                 Button("Fine") { dismissKeyboard() }.fontWeight(.semibold)
@@ -128,10 +124,20 @@ struct NewActivityView: View {
     private var navigationButtons: some View {
         Section {
             HStack {
-                if step > 0 { Button("Indietro") { showErrors = false; step -= 1 } }
+                if step > 0 {
+                    Button("Indietro", action: goBack)
+                        .buttonStyle(.borderless)
+                }
                 Spacer()
-                if step < 2 { Button("Continua") { continueToNextStep() }.fontWeight(.semibold) }
-                else { Button("Salva attività", action: save).fontWeight(.semibold) }
+                if step < 2 {
+                    Button("Continua", action: continueToNextStep)
+                        .buttonStyle(.borderless)
+                        .fontWeight(.semibold)
+                } else {
+                    Button("Salva attività", action: save)
+                        .buttonStyle(.borderless)
+                        .fontWeight(.semibold)
+                }
             }
         }
     }
@@ -211,7 +217,7 @@ struct NewActivityView: View {
                         .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
             }.requiredField(showErrors && draft.summaryRowIDs.isEmpty)
-            Toggle("Engine Run-up realmente eseguito", isOn: $draft.isEngineRunUp).disabled(draft.activityCode != .RUP)
+            Toggle("Engine Run-up realmente eseguito", isOn: $draft.isEngineRunUp)
             ActivityLegendView()
         }
     }
@@ -321,25 +327,32 @@ struct NewActivityView: View {
     private func continueToNextStep() {
         showErrors = true
         dismissKeyboard()
+        if step == 1 {
+            refreshSummaryRows()
+            if draft.summaryRowIDs.isEmpty, !draft.ata.isEmpty { draft.summaryRowIDs = ["ATA-\(draft.ata)"] }
+            stepErrors = []
+            showErrors = false
+            withAnimation { step = 2 }
+            return
+        }
         if step == 0 {
             stepErrors = []
             if draft.siteID == nil { stepErrors.append("Seleziona il luogo") }
             if draft.aircraftID == nil { stepErrors.append("Seleziona il tipo A/M") }
             if draft.registration.isEmpty { stepErrors.append("Seleziona le marche A/M") }
-        } else {
-            stepErrors = []
-            if !draft.codeComplete { stepErrors.append("Completa tutte le caselle del codice manutentivo") }
-            if draft.ata.isEmpty { stepErrors.append("Inserisci il capitolo ATA") }
-            if draft.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { stepErrors.append("Inserisci la descrizione dell'attività") }
         }
         if stepErrors.isEmpty {
-            if step == 1 {
-                refreshSummaryRows()
-                if draft.summaryRowIDs.isEmpty { draft.summaryRowIDs = ["ATA-\(draft.ata)"] }
-            }
             showErrors = false
             withAnimation { step += 1 }
         }
+    }
+
+    private func goBack() {
+        guard step > 0 else { return }
+        dismissKeyboard()
+        showErrors = false
+        stepErrors = []
+        withAnimation { step -= 1 }
     }
 
     private func dismissKeyboard() {
@@ -393,7 +406,7 @@ struct NewActivityView: View {
             ata: draft.ata, activityCode: draft.activityCode, activityDescription: normalizedDescription,
             equivalenceGroup: draft.equivalenceGroup, summaryRowID: encodedSummaryRows, workHours: hours, documentKind: draft.documentKind,
             documentNumber: draft.documentNumber, supervisor: supervisor,
-            isEngineRunUp: draft.activityCode == .RUP && draft.isEngineRunUp, isMERLEligible: draft.isMERLEligible))
+            isEngineRunUp: draft.isEngineRunUp, isMERLEligible: draft.isMERLEligible))
         try? context.save()
         draft = ActivityDraft(); step = 0; showErrors = false; useExistingTechnicalGroup = false
         equivalentReferenceID = nil; equivalentSearch = ""
